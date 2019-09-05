@@ -28,9 +28,11 @@ import android.content.res.AssetManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
+import android.icu.text.DateFormat;
 import android.media.ExifInterface;
 import android.net.wifi.WifiManager;
 import android.os.Environment;
+import android.os.Handler;
 import android.util.Log;
 
 import com.google.gson.Gson;
@@ -71,10 +73,16 @@ import javax.net.ssl.HttpsURLConnection;
 
 import timber.log.Timber;
 
+import jp.imlab.visphoto.MainActivity;
+import jp.imlab.visphoto.SoundPlay;
+
 /**
  * Provide web server function
  */
 public class AndroidWebServer {
+
+    // Sound Play
+//    private SoundPlay splay = MainActivity.getSplay;
 
     public static final int TIMEOUT_DEFAULT_MINUTE = -1;
 
@@ -161,7 +169,15 @@ public class AndroidWebServer {
     public void destroy() {
         if (server != null) {
             server.stop();
+//            new Handler().postDelayed(new Runnable() {
+//                @Override
+//                public void run() {
+//                    // TODO: ここで処理を実行する
+//                    MainActivity.splay.playSound(MainActivity.splay.soundVisphotoIsShuttingDown);
+//                }
+//            }, 1000);
             Log.i("AndroidWebServerActivity", "Stop server");
+            Log.d("errorType", errorType.toString());
         }
     }
 
@@ -290,8 +306,18 @@ public class AndroidWebServer {
             }
 
             try {
-                ExifInterface exifInterface = new ExifInterface(path);
-                String datetime = exifInterface.getAttribute(ExifInterface.TAG_DATETIME);
+                String datetime;
+                DateFormat ExifDateTimeFormat = new android.icu.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss");
+
+                if (extensionType == ExtensionType.WAV) {
+                    Log.d("setSpecifiedPhotoList", "WAV");
+                    File file = new File(path);
+                    datetime = ExifDateTimeFormat.format(file.lastModified());
+                } else {
+                    Log.d("setSpecifiedPhotoList", "NOT WAV");
+                    ExifInterface exifInterface = new ExifInterface(path);
+                    datetime = exifInterface.getAttribute(ExifInterface.TAG_DATETIME);
+                }
                 photoInformation = new PhotoInformation();
                 photoInformation.setPath(path);
                 photoInformation.setDatetime(datetime);
@@ -330,7 +356,13 @@ public class AndroidWebServer {
                     refreshResult = server.hasRefreshToken();
                     refreshCount++;
                 }
-                server.hasUploadFile();
+//                server.hasUploadFile();
+
+                if (!server.hasUploadFile()) {
+                    changeErrorLed();
+//                    MainActivity.splay.playSound(MainActivity.splay.soundUploadingFailed);
+                }
+
             }
             Intent intent = new Intent(SpecifiedResultReceiver.SPECIFIED_RESULT);
             intent.putExtra(SpecifiedResultReceiver.RESULT, errorType.getType());
@@ -734,6 +766,7 @@ public class AndroidWebServer {
 
             if (uploadPhotoApi.getAccessToken() == null || uploadPhotoApi.getAccessToken().isEmpty()) {
                 Timber.e("Access token is empty");
+                MainActivity.splay.playSound(MainActivity.splay.soundAccessTokenIsEmpty);
                 errorType = ErrorType.NOT_SETTINGS;
                 changeReadyLed();
                 uploadingPhotoList = null;
@@ -1260,6 +1293,7 @@ public class AndroidWebServer {
         @Override
         public void failedUploadFile(String result) {
             Timber.i("failed upload file : " + uploadingPhoto.getPath() + " by " + result);
+            MainActivity.splay.playSound(MainActivity.splay.soundUploadingFailed);
 
             try {
                 errorCode = Integer.parseInt(result);

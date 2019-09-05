@@ -23,6 +23,7 @@ public enum ExtensionType {
     JPG("image/jpeg"),
     RAW("image/x-adobe-dng"),
     MP4("video/mp4"),
+    WAV("audio/wav"),
     UNKNOWN("application/octet-stream");
 
     private String mimeType;
@@ -47,6 +48,10 @@ public enum ExtensionType {
         return path.endsWith(".MP4") || path.endsWith(".mp4");
     }
 
+    public static boolean isWAV(String path) {
+        return path.endsWith(".WAV") || path.endsWith(".wav");
+    }
+
     public static ExtensionType getType(String path) {
         if (isJPG(path)) {
             return JPG;
@@ -54,6 +59,8 @@ public enum ExtensionType {
             return RAW;
         } else if (isMP4(path)) {
             return MP4;
+        } else if (isWAV(path)) {
+            return WAV;
         } else {
             return UNKNOWN;
         }
