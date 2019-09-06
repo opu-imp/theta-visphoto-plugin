@@ -254,11 +254,11 @@ public class MainActivity extends PluginActivity {
                 if (keyCode == KeyReceiver.KEYCODE_CAMERA) {
                     // recording
                     if (recordingState==RS.Recording) {
+                        recordingState=RS.NotReady;
                         long currentTimeMillis = System.currentTimeMillis();
                         long recordLength = currentTimeMillis - startTimeMillis;
                         // 録音時間が5秒未満の場合は、最低でも5秒になるように、録音停止を遅延実行する。
                         if (recordLength < 5000) {
-                            recordingState=RS.NotReady;
                             // 録音開始から5秒後に処理を実行する
                             new Handler().postDelayed(new Runnable() {
                                 @Override
@@ -793,6 +793,7 @@ public class MainActivity extends PluginActivity {
      * for recording
      */
     private void startRecorder() {
+        recordingState=RS.Recording;
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -833,7 +834,6 @@ public class MainActivity extends PluginActivity {
             deleteSoundFile();
         } finally {
             releaseMediaRecorder();
-            recordingState=RS.NotReady;
             notificationAudioMovStop();
             notificationLedHide(LedTarget.LED7);  // 動画記録ランプ
         }
@@ -873,6 +873,14 @@ public class MainActivity extends PluginActivity {
         mediaRecorder.setAudioEncoder(AudioEncoder.DEFAULT);
         mediaRecorder.setOutputFile(soundFileName);
 
+//        mediaRecorder.setOnErrorListener(new MediaRecorder.OnErrorListener() {
+//
+//            @Override
+//            public void onError(MediaRecorder mr, int what, int extra) {
+//                Log.i("setOnErrorListener", "Error ("+what +") ("+extra+")");
+//            }
+//        });
+
         try {
             mediaRecorder.prepare();
         } catch (Exception e) {
@@ -910,7 +918,6 @@ public class MainActivity extends PluginActivity {
         protected Boolean doInBackground(Void... voids) {
             if (prepareMediaRecorder()) {
                 mediaRecorder.start();
-                recordingState=RS.Recording;
                 return true;
             }
             return false;

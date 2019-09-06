@@ -737,22 +737,23 @@ public class AndroidWebServer {
         }
 
         private boolean hasUploadFile() {
+            Log.i("SimpleHttpd", "hasUploadFile");
             notificationStartUpload();
             changeTransferringLed();
             uploadPhotoApi.setUserId(userId);
             boolean result = true;
             SettingData settingData = readSettingData();
-            if (specifiedPhotoList == null || specifiedPhotoList.size() == 0) {
-                boolean isUploadRaw = settingData.getIsUploadRaw();
-                boolean isUploadMovie = settingData.getIsUploadMovie();
-                uploadingPhotoList = getPhotoList(DCIM_PATH, isUploadRaw, isUploadMovie);
-                uploadingPhotoList.addAll(getPhotoList(PICTURES_PATH, isUploadRaw, isUploadMovie));
-            } else {
+//            if (specifiedPhotoList == null || specifiedPhotoList.size() == 0) {
+//                boolean isUploadRaw = settingData.getIsUploadRaw();
+//                boolean isUploadMovie = settingData.getIsUploadMovie();
+//                uploadingPhotoList = getPhotoList(DCIM_PATH, isUploadRaw, isUploadMovie);
+//                uploadingPhotoList.addAll(getPhotoList(PICTURES_PATH, isUploadRaw, isUploadMovie));
+//            } else {
                 uploadingPhotoList = new ArrayList();
                 for (PhotoInformation photoInformation : specifiedPhotoList) {
                     photoInformation.setUserId(userId);
                     uploadingPhotoList.add(photoInformation);
-                }
+//                }
             }
             uploadAllNumber = uploadingPhotoList.size();
             uploadCurrentNumber = 0;
