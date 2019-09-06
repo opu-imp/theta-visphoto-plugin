@@ -103,11 +103,16 @@ public class MainActivity extends PluginActivity {
 
     // for recording
 //    private static boolean isReady = false;
-    private boolean isRecording = false;
+    private enum RS {
+        Ready,
+        Recording,
+        NotReady
+    }
+    private RS recordingState = RS.NotReady;
     private MediaRecorder mediaRecorder;
     private String soundFileName;
     private long startTimeMillis;
-    private long stopTimeMillis;
+//    private long stopTimeMillis;
 
     // File cloud upload V2
     private final int LOG_DELETE_ELAPSED_DAYS = 30;
@@ -219,9 +224,6 @@ public class MainActivity extends PluginActivity {
                 () -> splay.playSound(splay.soundVisphotoIsShuttingDown)
         ));
 
-        // recording
-        stopTimeMillis = 0;
-
         // File cloud upload V2
         InitFileCloudUploadV2();
 
@@ -236,10 +238,8 @@ public class MainActivity extends PluginActivity {
             public void onKeyDown(int keyCode, KeyEvent keyEvent) {
                 if (keyCode == KeyReceiver.KEYCODE_CAMERA) {
 //                    if (isReady) {
-                        // 最後の録音停止から1秒未満の場合は録音開始ができない。
-                        long currentTimeMillis = System.currentTimeMillis();
-                        long intervalLength = currentTimeMillis - stopTimeMillis;
-                        if (mTakePictureTask == null && !isRecording && intervalLength >= 2000) {
+                        // 最後の録音停止から2秒未満の場合は録音開始ができない。
+                        if (mTakePictureTask == null && recordingState==RS.Ready) {
                             // recording
                             startRecorder();
                             // taking picture
@@ -257,11 +257,12 @@ public class MainActivity extends PluginActivity {
                 if (keyCode == KeyReceiver.KEYCODE_CAMERA) {
                     // recording
 //                    if (isReady && isRecording) {
-                    if (isRecording) {
+                    if (recordingState==RS.Recording) {
                         long currentTimeMillis = System.currentTimeMillis();
                         long recordLength = currentTimeMillis - startTimeMillis;
                         // 録音時間が5秒未満の場合は、最低でも5秒になるように、録音停止を遅延実行する。
                         if (recordLength < 5000) {
+                            recordingState=RS.NotReady;
                             // 録音開始から5秒後に処理を実行する
                             new Handler().postDelayed(new Runnable() {
                                 @Override
@@ -284,6 +285,7 @@ public class MainActivity extends PluginActivity {
         });
 
         notificationAudioSelf();
+        recordingState = RS.Ready;
     }
 
     @Override
@@ -325,14 +327,14 @@ public class MainActivity extends PluginActivity {
         finishApplicationFilter.addAction(FinishApplicationReceiver.FINISH_APPLICATION);
         registerReceiver(mFinishApplicationReceiver, finishApplicationFilter);
 
-        // Intent from other plugins
-        Intent intent = getIntent();
-        if (intent != null) {
-            List<String> photoList = intent.getStringArrayListExtra("com.theta360.clouduploadv2.photoList");
-            if (photoList != null && photoList.size() > 0) {
-                webUI.uploadSpecifiedPhotoList(photoList);
-            }
-        }
+//        // Intent from other plugins
+//        Intent intent = getIntent();
+//        if (intent != null) {
+//            List<String> photoList = intent.getStringArrayListExtra("com.theta360.clouduploadv2.photoList");
+//            if (photoList != null && photoList.size() > 0) {
+//                webUI.uploadSpecifiedPhotoList(photoList);
+//            }
+//        }
     }
 
     @Override
@@ -348,6 +350,7 @@ public class MainActivity extends PluginActivity {
 
     @Override
     protected void onPause() {
+        Log.d("MainActivity","onPause");
         super.onPause();
 
         // taking picture
@@ -369,6 +372,7 @@ public class MainActivity extends PluginActivity {
 
     @Override
     protected void onStop() {
+        Log.d("MainActivity","onStop");
         super.onStop();
 
         // File cloud upload V2
@@ -383,8 +387,9 @@ public class MainActivity extends PluginActivity {
 
     @Override
     protected void onDestroy() {
-        super.onDestroy();
-        webUI.destroy();
+        Log.d("MainActivity","onDestroy");
+//        super.onDestroy();
+//        webUI.destroy();
     }
 
     /**
@@ -443,7 +448,7 @@ public class MainActivity extends PluginActivity {
                 }
 
                 // Upload the picture file
-//                uploadSingleFile(pictureFileName);
+                uploadSingleFile(pictureFileName);
             } else {
                 notificationError(getResources().getString(R.string.take_picture_error));
             }
@@ -530,9 +535,9 @@ public class MainActivity extends PluginActivity {
     }
 
     private void uploadSingleFile(String fileName) {
-        List<String> uploadFileList = new ArrayList<String>();
-        uploadFileList.add(fileName);
-        webUI.uploadSpecifiedPhotoList(uploadFileList);
+//        List<String> uploadFileList = new ArrayList<String>();
+//        uploadFileList.add(fileName);
+//        webUI.uploadSpecifiedPhotoList(uploadFileList);
     }
 
     /**
@@ -776,35 +781,53 @@ public class MainActivity extends PluginActivity {
                 splay.playSound(splay.soundStartRecording);
             }
         }, 100);
+        notificationLedBlink(LedTarget.LED7, LedColor.RED, 2000);  // 動画記録ランプ
         startTimeMillis = System.currentTimeMillis();
         soundFileName = getFilesDir() + File.separator + String.format("%s.wav", dateTimeFormat.format(new Date(startTimeMillis)));
-//        pictureFileName = soundFilePath.replace(".wav", ".jpg");
         Log.d("soundFileName", soundFileName);
-//        Log.d("pictureFileName", pictureFileName);
-        new MediaRecorderPrepareTask().execute();
-        notificationLedBlink(LedTarget.LED7, LedColor.RED, 2000);  // 動画記録ランプ
+
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                // TODO: ここで処理を実行する
+                new MediaRecorderPrepareTask().execute();
+            }
+        }, 800);
     }
 
     private void stopRecorder() {
         try {
             mediaRecorder.stop();
-
+            Log.d("Recorder", "Stop");
             splay.playSound(splay.soundStopRecording);
+
+            File file = new File(soundFileName);
+            long filesize = file.length();
+            Log.d("soundFileSize", ""+filesize);
+
+            // Upload the sound file
+            uploadSingleFile(soundFileName);
+
         } catch (RuntimeException e) {
             splay.playSound(splay.soundRecordingFailed);
             Log.d("Recorder", "RuntimeException: stop() is called immediately after start()");
             deleteSoundFile();
         } finally {
             releaseMediaRecorder();
-            isRecording = false;
-            stopTimeMillis = System.currentTimeMillis();
+            recordingState=RS.NotReady;
+//            stopTimeMillis = System.currentTimeMillis();
             notificationAudioMovStop();
             notificationLedHide(LedTarget.LED7);  // 動画記録ランプ
         }
-        Log.d("Recorder", "Stop");
 
-        // Upload the sound file
-        uploadSingleFile(soundFileName);
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                // TODO: ここで処理を実行する
+                recordingState=RS.Ready;
+                splay.playSound(splay.soundReady);
+            }
+        }, 2000);
 
     }
 
@@ -869,7 +892,7 @@ public class MainActivity extends PluginActivity {
         protected Boolean doInBackground(Void... voids) {
             if (prepareMediaRecorder()) {
                 mediaRecorder.start();
-                isRecording = true;
+                recordingState=RS.Recording;
                 return true;
             }
             return false;

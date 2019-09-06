@@ -138,7 +138,17 @@ public class AndroidWebServer {
         Log.d("AndroidWebServerActivity", "onCreate");
         WifiManager wifiManager = (WifiManager) con.getSystemService(Context.WIFI_SERVICE);
 
-        assert wifiManager != null;
+//        assert wifiManager != null;
+        if (wifiManager==null) {
+            MainActivity.splay.playSound(MainActivity.splay.soundWifiIsNotConnected);
+            try {
+                Thread.sleep(1000);
+            } catch(InterruptedException e){
+                e.printStackTrace();
+            }
+            System.exit(0);
+        }
+
         int ipAddress = wifiManager.getConnectionInfo().getIpAddress();
         @SuppressLint("DefaultLocale") final String formattedIpAddress = String.format("%d.%d.%d.%d", (ipAddress & 0xff), (ipAddress >> 8 & 0xff), (ipAddress >> 16 & 0xff), (ipAddress >> 24 & 0xff));
 
@@ -307,14 +317,11 @@ public class AndroidWebServer {
 
             try {
                 String datetime;
-                DateFormat ExifDateTimeFormat = new android.icu.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss");
-
                 if (extensionType == ExtensionType.WAV) {
-                    Log.d("setSpecifiedPhotoList", "WAV");
                     File file = new File(path);
-                    datetime = ExifDateTimeFormat.format(file.lastModified());
+                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss");
+                    datetime = sdf.format(file.lastModified());
                 } else {
-                    Log.d("setSpecifiedPhotoList", "NOT WAV");
                     ExifInterface exifInterface = new ExifInterface(path);
                     datetime = exifInterface.getAttribute(ExifInterface.TAG_DATETIME);
                 }
