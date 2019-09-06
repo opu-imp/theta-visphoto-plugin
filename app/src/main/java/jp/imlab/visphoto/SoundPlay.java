@@ -12,10 +12,10 @@ public class SoundPlay {
 
     private SoundPool soundPool;
     private static int numSound = 10;
-    public int soundWelcomeToVisPhoto, soundReady, soundWifiIsNotConnected;
+    public int soundWelcomeToVisPhoto, soundWifiIsNotConnected, soundVisphotoIsShuttingDown, soundReady;
 //    public int soundWifiConnected, soundWifiDisconnected;
     public int soundStartRecording, soundStopRecording, soundRecordingFailed;
-    public int soundUploadingFailed, soundAccessTokenIsEmpty, soundVisphotoIsShuttingDown;
+    public int soundUploadingFailed, soundAccessTokenIsEmpty;
 
     public SoundPlay() {
         AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
@@ -38,11 +38,14 @@ public class SoundPlay {
         // welcome_to_visphoto.ogg をロードしておく
         soundWelcomeToVisPhoto = soundPool.load(context, R.raw.welcome_to_visphoto, 1);
 
-        // ready.ogg をロードしておく
-        soundReady = soundPool.load(context, R.raw.ready, 1);
-
         // wifi_is_not_connected.ogg をロードしておく
         soundWifiIsNotConnected = soundPool.load(context, R.raw.wifi_is_not_connected, 1);
+
+        // visphoto_is_shutting_down.ogg をロードしておく
+        soundVisphotoIsShuttingDown = soundPool.load(context, R.raw.visphoto_is_shutting_down, 1);
+
+        // ready.ogg をロードしておく
+        soundReady = soundPool.load(context, R.raw.ready, 1);
 
 //        // wifi_connected.ogg をロードしておく
 //        soundWifiConnected = soundPool.load(context, R.raw.wifi_connected, 1);
@@ -64,9 +67,6 @@ public class SoundPlay {
 
         // access_token_is_empty.ogg をロードしておく
         soundAccessTokenIsEmpty = soundPool.load(context, R.raw.access_token_is_empty, 1);
-
-        // visphoto_is_shutting_down.ogg をロードしておく
-        soundVisphotoIsShuttingDown = soundPool.load(context, R.raw.visphoto_is_shutting_down, 1);
 
         // load が終わったか確認する場合
         soundPool.setOnLoadCompleteListener(new SoundPool.OnLoadCompleteListener() {

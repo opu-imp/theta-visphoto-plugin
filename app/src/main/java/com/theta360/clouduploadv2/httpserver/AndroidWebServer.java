@@ -81,9 +81,6 @@ import jp.imlab.visphoto.SoundPlay;
  */
 public class AndroidWebServer {
 
-    // Sound Play
-//    private SoundPlay splay = MainActivity.getSplay;
-
     public static final int TIMEOUT_DEFAULT_MINUTE = -1;
 
     private final String DCIM_PATH = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + Environment.DIRECTORY_DCIM + "/";
@@ -138,17 +135,7 @@ public class AndroidWebServer {
         Log.d("AndroidWebServerActivity", "onCreate");
         WifiManager wifiManager = (WifiManager) con.getSystemService(Context.WIFI_SERVICE);
 
-//        assert wifiManager != null;
-        if (wifiManager==null) {
-            MainActivity.splay.playSound(MainActivity.splay.soundWifiIsNotConnected);
-            try {
-                Thread.sleep(1000);
-            } catch(InterruptedException e){
-                e.printStackTrace();
-            }
-            System.exit(0);
-        }
-
+        assert wifiManager != null;
         int ipAddress = wifiManager.getConnectionInfo().getIpAddress();
         @SuppressLint("DefaultLocale") final String formattedIpAddress = String.format("%d.%d.%d.%d", (ipAddress & 0xff), (ipAddress >> 8 & 0xff), (ipAddress >> 16 & 0xff), (ipAddress >> 24 & 0xff));
 

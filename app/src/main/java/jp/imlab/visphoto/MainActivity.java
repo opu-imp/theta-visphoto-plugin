@@ -102,7 +102,6 @@ public class MainActivity extends PluginActivity {
     String pictureFileName;
 
     // for recording
-//    private static boolean isReady = false;
     private enum RS {
         Ready,
         Recording,
@@ -112,7 +111,6 @@ public class MainActivity extends PluginActivity {
     private MediaRecorder mediaRecorder;
     private String soundFileName;
     private long startTimeMillis;
-//    private long stopTimeMillis;
 
     // File cloud upload V2
     private final int LOG_DELETE_ELAPSED_DAYS = 30;
@@ -128,10 +126,6 @@ public class MainActivity extends PluginActivity {
     public static MainActivity getInstance() {
         return instance;
     }
-
-//    public static void setIsReady(boolean bool) {
-//        isReady = bool;
-//    }
 
     private ChangeLedReceiver mChangeLedReceiver;
     private ChangeLedReceiver.Callback onChangeLedReceiver = new ChangeLedReceiver.Callback() {
@@ -183,6 +177,7 @@ public class MainActivity extends PluginActivity {
     private SpecifiedResultReceiver.Callback onSpecifiedResultReceiver = new SpecifiedResultReceiver.Callback() {
         @Override
         public void callSpecifiedResultCallback(String result) {
+            Log.d("SpecifiedResultReceiver", "callSpecifiedResultCallback");
             Intent data = new Intent();
             Bundle bundle = new Bundle();
             ErrorType errorType = ErrorType.getType(result);
@@ -190,7 +185,9 @@ public class MainActivity extends PluginActivity {
             bundle.putString("ResultMessage", errorType.getMessage());
             data.putExtras(bundle);
             setResult(RESULT_OK, data);
-            finish();
+            Log.d("SpecifiedResultReceiver", "Before finish");
+//            finish();
+//            Log.d("SpecifiedResultReceiver", "After finish");
         }
     };
 
@@ -198,6 +195,7 @@ public class MainActivity extends PluginActivity {
     private DeleteFileReceiver.Callback onDeleteFileReceiver = new DeleteFileReceiver.Callback() {
         @Override
         public void callDeleteFileCallback(String[] targets) {
+            Log.d("DeleteFileReceiver", "callDeleteFileCallback");
             notificationDatabaseUpdate(targets);
         }
     };
@@ -206,6 +204,7 @@ public class MainActivity extends PluginActivity {
     private FinishApplicationReceiver.Callback onFinishApplicationReceiver = new FinishApplicationReceiver.Callback() {
         @Override
         public void callFinishApplicationCallback() {
+            Log.d("FinishApplicationReceiver", "callFinishApplicationCallback");
             exitProcess();
         }
     };
@@ -219,10 +218,10 @@ public class MainActivity extends PluginActivity {
         instance = this;
         splay = new SoundPlay();
 
-        // Add shutdown hook
-        Runtime.getRuntime().addShutdownHook(new Thread(
-                () -> splay.playSound(splay.soundVisphotoIsShuttingDown)
-        ));
+//        // Add shutdown hook
+//        Runtime.getRuntime().addShutdownHook(new Thread(
+//                () -> splay.playSound(splay.soundVisphotoIsShuttingDown)
+//        ));
 
         // File cloud upload V2
         InitFileCloudUploadV2();
@@ -237,26 +236,23 @@ public class MainActivity extends PluginActivity {
             @Override
             public void onKeyDown(int keyCode, KeyEvent keyEvent) {
                 if (keyCode == KeyReceiver.KEYCODE_CAMERA) {
-//                    if (isReady) {
-                        // 最後の録音停止から2秒未満の場合は録音開始ができない。
-                        if (mTakePictureTask == null && recordingState==RS.Ready) {
-                            // recording
-                            startRecorder();
-                            // taking picture
-                            takePicture();
-                        } else {
-                            // error
-                            notificationAudioWarning();
-                        }
+                    // 最後の録音停止から2秒未満の場合は録音開始ができない。
+                    if (mTakePictureTask == null && recordingState==RS.Ready) {
+                        // recording
+                        startRecorder();
+                        // taking picture
+                        takePicture();
+                    } else {
+                        // error
+                        notificationAudioWarning();
                     }
-//                }
+                }
             }
 
             @Override
             public void onKeyUp(int keyCode, KeyEvent keyEvent) {
                 if (keyCode == KeyReceiver.KEYCODE_CAMERA) {
                     // recording
-//                    if (isReady && isRecording) {
                     if (recordingState==RS.Recording) {
                         long currentTimeMillis = System.currentTimeMillis();
                         long recordLength = currentTimeMillis - startTimeMillis;
@@ -290,10 +286,32 @@ public class MainActivity extends PluginActivity {
 
     @Override
     protected void onResume() {
+        Log.d("MainActivity","onResume");
         super.onResume();
 
         // WIFI connection (CL mode)
         notificationWlanCl();
+
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                // TODO: ここで処理を実行する
+                new InternetCheck(internet -> {
+                    if (!internet) {
+                        Log.d("Wifi", "Not Connected");
+                        splay.playSound(splay.soundWifiIsNotConnected);
+                        try {
+                            Thread.sleep(2000);
+                        } catch(InterruptedException e){
+                            e.printStackTrace();
+                        }
+                        onDestroy();
+                    } else {
+                        Log.d("Wifi", "Connected");
+                    }
+                } );
+            }
+        }, 5000);
 
         // File cloud upload V2
         mChangeLedReceiver = new ChangeLedReceiver(onChangeLedReceiver);
@@ -388,8 +406,9 @@ public class MainActivity extends PluginActivity {
     @Override
     protected void onDestroy() {
         Log.d("MainActivity","onDestroy");
-//        super.onDestroy();
-//        webUI.destroy();
+        splay.playSound(splay.soundVisphotoIsShuttingDown);
+        super.onDestroy();
+        webUI.destroy();
     }
 
     /**
@@ -535,9 +554,9 @@ public class MainActivity extends PluginActivity {
     }
 
     private void uploadSingleFile(String fileName) {
-//        List<String> uploadFileList = new ArrayList<String>();
-//        uploadFileList.add(fileName);
-//        webUI.uploadSpecifiedPhotoList(uploadFileList);
+        List<String> uploadFileList = new ArrayList<String>();
+        uploadFileList.add(fileName);
+        webUI.uploadSpecifiedPhotoList(uploadFileList);
     }
 
     /**
@@ -815,7 +834,6 @@ public class MainActivity extends PluginActivity {
         } finally {
             releaseMediaRecorder();
             recordingState=RS.NotReady;
-//            stopTimeMillis = System.currentTimeMillis();
             notificationAudioMovStop();
             notificationLedHide(LedTarget.LED7);  // 動画記録ランプ
         }
