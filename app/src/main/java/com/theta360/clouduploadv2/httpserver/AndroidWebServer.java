@@ -65,6 +65,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Logger;
@@ -110,6 +112,7 @@ public class AndroidWebServer {
     private List<PhotoInformation> uploadedPhotoList;
     private List<PhotoInformation> uploadingPhotoList;
     private PhotoInformation uploadingPhoto;
+    private Deque<PhotoInformation> uploadingFileQueue;
     private Boolean isSucceedUpload;
     private int errorCode;
     private List<PhotoInformation> specifiedPhotoList;
@@ -118,6 +121,8 @@ public class AndroidWebServer {
     private int uploadAllNumber;
     private int uploadCurrentNumber;
     private boolean isDeleteUploadedFile;
+
+    ExecutorService uploadPushedFilesService;
 
     public AndroidWebServer(Context context) {
         con = context;
@@ -156,6 +161,8 @@ public class AndroidWebServer {
         dbObject = helper.getWritableDatabase();
         uploadedPhotoList = new ArrayList();
         updateUploadInfo();
+
+        uploadingFileQueue = new ArrayDeque<>();
     }
 
     /**
@@ -322,6 +329,42 @@ public class AndroidWebServer {
         }
     }
 
+    // ***** for uploading single file *****
+    public void addUploadingFile(String path) {
+//        specifiedPhotoList = new ArrayList();
+        PhotoInformation photoInformation;
+//        for (String path : photoList) {
+            ExtensionType extensionType = ExtensionType.getType(path);
+            if (extensionType == null) {
+//                continue;
+                return;
+            }
+            if (!(new File(path).isFile())) {
+//                continue;
+                return;
+            }
+
+            try {
+                String datetime;
+                if (extensionType == ExtensionType.WAV) {
+                    File file = new File(path);
+                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss");
+                    datetime = sdf.format(file.lastModified());
+                } else {
+                    ExifInterface exifInterface = new ExifInterface(path);
+                    datetime = exifInterface.getAttribute(ExifInterface.TAG_DATETIME);
+                }
+                photoInformation = new PhotoInformation();
+                photoInformation.setPath(path);
+                photoInformation.setDatetime(datetime);
+//                specifiedPhotoList.add(photoInformation);
+                uploadingFileQueue.push(photoInformation);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+//        }
+    }
+
     private void startUploadSpecifiedPhotoList() {
         UploadSpecifiedPhotoList uploadSpecifiedPhotoList = new UploadSpecifiedPhotoList();
 
@@ -361,6 +404,68 @@ public class AndroidWebServer {
             Intent intent = new Intent(SpecifiedResultReceiver.SPECIFIED_RESULT);
             intent.putExtra(SpecifiedResultReceiver.RESULT, errorType.getType());
             con.sendBroadcast(intent);
+        }
+    }
+
+
+    // ***** for uploading single file *****
+    public void startUploadPushedFiles() {
+        UploadPushedFiles uploadPushedFiles = new UploadPushedFiles();
+
+        uploadPushedFilesService = null;
+        try {
+            uploadPushedFilesService = Executors.newSingleThreadExecutor();
+            uploadPushedFilesService.execute(uploadPushedFiles);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+//            uploadPushedFilesService.shutdown();
+        }
+    }
+
+    // ***** for uploading single file *****
+    public void stopUploadPushedFiles() {
+        uploadPushedFilesService.shutdown();
+    }
+
+    // ***** for uploading single file *****
+    private class UploadPushedFiles implements Runnable {
+        @Override
+        public void run() {
+            while(true) {
+                errorType = ErrorType.SUCCESS;
+                updateUploadInfo();
+                if (refreshToken == null || refreshToken.isEmpty()) {
+                    errorType = ErrorType.NOT_SETTINGS;
+                } else {
+                    int refreshCount = 0;
+                    boolean refreshResult = false;
+                    while (!refreshResult && refreshCount < REFRESH_COUNT_MAX) {
+                        refreshResult = server.hasRefreshToken();
+                        refreshCount++;
+                    }
+
+                    Log.d("UploadPushedFiles, dequeue size", ""+uploadingFileQueue.size());
+
+                    if (uploadingFileQueue.size()!=0) {
+                        PhotoInformation pi = uploadingFileQueue.pop();
+                        if (!server.uploadSingleFile(pi)) {
+                            changeErrorLed();
+//                            MainActivity.splay.playSound(MainActivity.splay.soundUploadingFailed);
+                        }
+                        Intent intent = new Intent(SpecifiedResultReceiver.SPECIFIED_RESULT);
+                        intent.putExtra(SpecifiedResultReceiver.RESULT, errorType.getType());
+                        con.sendBroadcast(intent);
+                    }
+                }
+
+                try {
+                    Thread.sleep(1000);
+                } catch(InterruptedException e){
+                    e.printStackTrace();
+                }
+            }
+
         }
     }
 
@@ -840,6 +945,120 @@ public class AndroidWebServer {
             specifiedPhotoList = null;
             uploadFileService = null;
             notificationEndUpload();
+
+            return result;
+        }
+
+        // ***** for uploading single file *****
+        private boolean uploadSingleFile(PhotoInformation photoInformation) {
+            Log.i("SimpleHttpd", "uploadSingleFile");
+            notificationStartUpload();
+            changeTransferringLed();
+            uploadPhotoApi.setUserId(userId);
+            boolean result = true;
+            SettingData settingData = readSettingData();
+
+            if (uploadPhotoApi.getAccessToken() == null || uploadPhotoApi.getAccessToken().isEmpty()) {
+                Timber.e("Access token is empty");
+                MainActivity.splay.playSound(MainActivity.splay.soundAccessTokenIsEmpty);
+                errorType = ErrorType.NOT_SETTINGS;
+                changeReadyLed();
+//                uploadingPhotoList = null;
+//                specifiedPhotoList = null;
+                uploadFileService = null;
+                notificationEndUpload();
+                return false;
+            }
+
+            Log.i("SimpleHttpd", "AAA");
+
+            boolean isNotAuthorization = false;
+            int timeoutMSec = settingData.getNoOperationTimeoutMinute() * 60 * 1000;
+            isDeleteUploadedFile = settingData.getIsDeleteUploadedFile();
+            try {
+//                boolean isFirst = true;
+//                for (PhotoInformation photoInformation : uploadingPhotoList) {
+//                    if (isFirst) {
+//                        isFirst = false;
+//                    } else {
+//                        uploadCurrentNumber++;
+//                    }
+                    changeTransferringStatusLed();
+//                    uploadingPhoto = photoInformation;
+                    isSucceedUpload = null;
+                    try {
+                        File file = new File(photoInformation.getPath());
+                        uploadPhotoApi.setUploadDataPath(photoInformation.getPath());
+                        uploadPhotoApi.setUploadDataName(file.getName());
+                        uploadPhotoApi.startUploadFile();
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        result = false;
+//                        continue;
+                    }
+
+                    Log.i("SimpleHttpd", "BBB");
+
+
+                    long startUploadingMSec = System.currentTimeMillis();
+                    while (true) {
+                        if (isSucceedUpload == null) {
+                            Log.d("uploadSingleFile", "isSucceedUpload == null");
+
+                            if (Thread.interrupted()) {
+                                Log.d("uploadSingleFile", "Thread.interrupted");
+                                throw new InterruptedException("");
+                            }
+                            continue;
+                        } else if (isSucceedUpload) {
+                            Log.d("uploadSingleFile", "isSucceedUpload");
+
+                            break;
+                        } else {
+                            if (errorCode == HttpsURLConnection.HTTP_BAD_REQUEST ||
+                                    errorCode == HttpsURLConnection.HTTP_FORBIDDEN) {
+                                errorType = ErrorType.BAD_SETTINGS;
+                                Log.d("ErrorType1", ""+errorType);
+                                isNotAuthorization = true;
+                            } else {
+                                if (timeoutMSec > 0 && System.currentTimeMillis() - startUploadingMSec > timeoutMSec) {
+                                    errorType = ErrorType.TIMEOUT;
+                                    Log.d("ErrorType2", ""+errorType);
+                                    break;
+                                }
+                                Log.d("uploadSingleFile", "ZZZ");
+                                changeStopTransferringLed();
+                                Thread.sleep(UPLOAD_RETRY_WAIT_MSEC);
+                                changeTransferringLed();
+                                uploadPhotoApi.startUploadFile();
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+
+                    Log.i("SimpleHttpd", "BBB-0");
+
+                    if (isNotAuthorization) {
+                        result = false;
+//                        break;
+                    }
+//                }
+//                uploadCurrentNumber++;
+                // Wait 3 seconds + alpha for 3 seconds to flash the LED in the upload completed state
+                Thread.sleep(3200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            Log.i("SimpleHttpd", "CCC");
+
+            changeReadyLed();
+//            uploadingPhotoList = null;
+//            specifiedPhotoList = null;
+            uploadFileService = null;
+            notificationEndUpload();
+
+            Log.i("SimpleHttpd", "DDD");
 
             return result;
         }

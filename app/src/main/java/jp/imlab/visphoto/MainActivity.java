@@ -102,6 +102,10 @@ public class MainActivity extends PluginActivity {
     String pictureFileName;
 
     // for recording
+    // 録音時間が10秒未満の場合は、最低でも10秒になるように、録音停止を遅延実行する。
+    private Long minimumRecordingLength = 10000L;
+    // 最後の録音停止から2秒未満の場合は録音開始ができない。
+    private Long minimumRecordingInterval = 2000L;
     private enum RS {
         Ready,
         Recording,
@@ -122,6 +126,9 @@ public class MainActivity extends PluginActivity {
     private ExecutorService shutDownTimerService = null;
     private ExecutorService settingPollingService = null;
     private static Object lock;
+
+    // Wifiに接続されているかをどれくらい待ってからチェックするか
+    private Long wifiConnectionCheckDelay = 5000L;
 
     public static MainActivity getInstance() {
         return instance;
@@ -177,7 +184,7 @@ public class MainActivity extends PluginActivity {
     private SpecifiedResultReceiver.Callback onSpecifiedResultReceiver = new SpecifiedResultReceiver.Callback() {
         @Override
         public void callSpecifiedResultCallback(String result) {
-            Log.d("SpecifiedResultReceiver", "callSpecifiedResultCallback");
+//            Log.d("SpecifiedResultReceiver", "callSpecifiedResultCallback");
             Intent data = new Intent();
             Bundle bundle = new Bundle();
             ErrorType errorType = ErrorType.getType(result);
@@ -185,9 +192,7 @@ public class MainActivity extends PluginActivity {
             bundle.putString("ResultMessage", errorType.getMessage());
             data.putExtras(bundle);
             setResult(RESULT_OK, data);
-            Log.d("SpecifiedResultReceiver", "Before finish");
 //            finish();
-//            Log.d("SpecifiedResultReceiver", "After finish");
         }
     };
 
@@ -257,8 +262,8 @@ public class MainActivity extends PluginActivity {
                         recordingState=RS.NotReady;
                         long currentTimeMillis = System.currentTimeMillis();
                         long recordLength = currentTimeMillis - startTimeMillis;
-                        // 録音時間が5秒未満の場合は、最低でも5秒になるように、録音停止を遅延実行する。
-                        if (recordLength < 5000) {
+                        // 録音時間が8秒未満の場合は、最低でも5秒になるように、録音停止を遅延実行する。
+                        if (recordLength < minimumRecordingLength) {
                             // 録音開始から5秒後に処理を実行する
                             new Handler().postDelayed(new Runnable() {
                                 @Override
@@ -266,7 +271,7 @@ public class MainActivity extends PluginActivity {
                                     // TODO: ここで処理を実行する
                                     stopRecorder();
                                 }
-                            }, 5000 - recordLength);
+                            }, minimumRecordingLength - recordLength);
                         } else {
                             stopRecorder();
                         }
@@ -311,7 +316,7 @@ public class MainActivity extends PluginActivity {
                     }
                 } );
             }
-        }, 5000);
+        }, wifiConnectionCheckDelay);
 
         // File cloud upload V2
         mChangeLedReceiver = new ChangeLedReceiver(onChangeLedReceiver);
@@ -344,6 +349,8 @@ public class MainActivity extends PluginActivity {
         IntentFilter finishApplicationFilter = new IntentFilter();
         finishApplicationFilter.addAction(FinishApplicationReceiver.FINISH_APPLICATION);
         registerReceiver(mFinishApplicationReceiver, finishApplicationFilter);
+
+//        webUI.startUploadPushedFiles();
 
 //        // Intent from other plugins
 //        Intent intent = getIntent();
@@ -386,6 +393,8 @@ public class MainActivity extends PluginActivity {
         unregisterReceiver(mSpecifiedResultReceiver);
         unregisterReceiver(mDeleteFileReceiver);
         unregisterReceiver(mFinishApplicationReceiver);
+
+//        webUI.stopUploadPushedFiles();
     }
 
     @Override
@@ -558,6 +567,10 @@ public class MainActivity extends PluginActivity {
         uploadFileList.add(fileName);
         webUI.uploadSpecifiedPhotoList(uploadFileList);
     }
+
+//    private void uploadSingleFile(String fileName) {
+//        webUI.addUploadingFile(fileName);
+//    }
 
     /**
      * Call the shooting application when this plug-in ends.
@@ -838,6 +851,7 @@ public class MainActivity extends PluginActivity {
             notificationLedHide(LedTarget.LED7);  // 動画記録ランプ
         }
 
+        // 最後の録音停止から2秒未満の場合は録音開始ができない。
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -845,7 +859,7 @@ public class MainActivity extends PluginActivity {
                 recordingState=RS.Ready;
                 splay.playSound(splay.soundReady);
             }
-        }, 2000);
+        }, minimumRecordingInterval);
 
     }
 
@@ -925,12 +939,12 @@ public class MainActivity extends PluginActivity {
 
         @Override
         protected void onPostExecute(Boolean result) {
+            Log.d("Recorder", "onPostExecute");
             if (!result) {
                 Log.e("Recorder", "MediaRecorder prepare failed");
                 notificationError("");
                 return;
             }
-            Log.d("Recorder", "onPostExecute");
         }
     }
 }
