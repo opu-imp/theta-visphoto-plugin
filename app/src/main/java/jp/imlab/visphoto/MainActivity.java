@@ -74,6 +74,8 @@ import com.theta360.pluginlibrary.receiver.KeyReceiver;
 import com.theta360.pluginlibrary.values.LedColor;
 import com.theta360.pluginlibrary.values.LedTarget;
 
+import com.google.common.io.Files;
+
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
@@ -87,12 +89,20 @@ import java.util.regex.Pattern;
 
 import timber.log.Timber;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+
 public class MainActivity extends PluginActivity {
     private final DateFormat dateTimeFormat = new SimpleDateFormat("yyyyMMdd_HHmmss");
 
     // Sound Play
     public static SoundPlay splay;
     private static MainActivity instance = null;
+
+    // Upload dir
+    static String UploadDir;
+    public static String getUploadDir() {
+        return UploadDir;
+    }
 
     // for taking picture
     private TakePictureTask mTakePictureTask;
@@ -127,8 +137,10 @@ public class MainActivity extends PluginActivity {
     private ExecutorService settingPollingService = null;
     private static Object lock;
 
-    // Wifiに接続されているかをどれくらい待ってからチェックするか
-    private Long wifiConnectionCheckDelay = 5000L;
+//    // Wifiに接続されているかをどれくらい待ってからチェックするか
+//    private Long wifiConnectionCheckDelay = 5000L;
+    // ファイルアップロードを試みる間隔
+    private Long uploadInterval = 15000L;
 
     public static MainActivity getInstance() {
         return instance;
@@ -223,6 +235,13 @@ public class MainActivity extends PluginActivity {
         instance = this;
         splay = new SoundPlay();
 
+        // Create UploadDir if not exists
+        UploadDir = getFilesDir() + "/VisPhoto_upload";
+        File dir = new File(UploadDir);
+        if(!dir.exists()){
+            dir.mkdirs();
+        }
+
 //        // Add shutdown hook
 //        Runtime.getRuntime().addShutdownHook(new Thread(
 //                () -> splay.playSound(splay.soundVisphotoIsShuttingDown)
@@ -297,26 +316,55 @@ public class MainActivity extends PluginActivity {
         // WIFI connection (CL mode)
         notificationWlanCl();
 
-        new Handler().postDelayed(new Runnable() {
+        // Start uploading picture and sound files if Wifi connection is available
+        final Handler handler = new Handler();
+        final Runnable r = new Runnable() {
             @Override
             public void run() {
                 // TODO: ここで処理を実行する
                 new InternetCheck(internet -> {
-                    if (!internet) {
-                        Log.d("Wifi", "Not Connected");
-                        splay.playSound(splay.soundWifiIsNotConnected);
-                        try {
-                            Thread.sleep(2000);
-                        } catch(InterruptedException e){
-                            e.printStackTrace();
-                        }
-                        onDestroy();
-                    } else {
+                    if (internet) {
                         Log.d("Wifi", "Connected");
+                        webUI.startUpload();
+                    } else {
+                        Log.d("Wifi", "Not connected");
                     }
                 } );
+
+//                // List up files in UploadDir
+//                File [] files = new File(UploadDir+"/").listFiles();
+//                for(int i = 0; i < files.length; i++) {
+//                    if (files[i].isFile()) {
+//                        System.out.print(files[i].getName() + "  ");
+//                    }
+//                }
+//                System.out.println();
+
+                handler.postDelayed(this, uploadInterval);
             }
-        }, wifiConnectionCheckDelay);
+        };
+        handler.post(r);
+
+//        new Handler().postDelayed(new Runnable() {
+//            @Override
+//            public void run() {
+//                // TODO: ここで処理を実行する
+//                new InternetCheck(internet -> {
+//                    if (!internet) {
+//                        Log.d("Wifi", "Not Connected");
+//                        splay.playSound(splay.soundWifiIsNotConnected);
+//                        try {
+//                            Thread.sleep(2000);
+//                        } catch(InterruptedException e){
+//                            e.printStackTrace();
+//                        }
+//                        onDestroy();
+//                    } else {
+//                        Log.d("Wifi", "Connected");
+//                    }
+//                } );
+//            }
+//        }, wifiConnectionCheckDelay);
 
         // File cloud upload V2
         mChangeLedReceiver = new ChangeLedReceiver(onChangeLedReceiver);
@@ -350,16 +398,14 @@ public class MainActivity extends PluginActivity {
         finishApplicationFilter.addAction(FinishApplicationReceiver.FINISH_APPLICATION);
         registerReceiver(mFinishApplicationReceiver, finishApplicationFilter);
 
-//        webUI.startUploadPushedFiles();
-
-//        // Intent from other plugins
-//        Intent intent = getIntent();
-//        if (intent != null) {
-//            List<String> photoList = intent.getStringArrayListExtra("com.theta360.clouduploadv2.photoList");
-//            if (photoList != null && photoList.size() > 0) {
-//                webUI.uploadSpecifiedPhotoList(photoList);
-//            }
-//        }
+        // Intent from other plugins
+        Intent intent = getIntent();
+        if (intent != null) {
+            List<String> photoList = intent.getStringArrayListExtra("com.theta360.clouduploadv2.photoList");
+            if (photoList != null && photoList.size() > 0) {
+                webUI.uploadSpecifiedPhotoList(photoList);
+            }
+        }
     }
 
     @Override
@@ -393,8 +439,6 @@ public class MainActivity extends PluginActivity {
         unregisterReceiver(mSpecifiedResultReceiver);
         unregisterReceiver(mDeleteFileReceiver);
         unregisterReceiver(mFinishApplicationReceiver);
-
-//        webUI.stopUploadPushedFiles();
     }
 
     @Override
@@ -442,41 +486,76 @@ public class MainActivity extends PluginActivity {
                 }
                 isPictureReady = true;
 
+//
+//                Matcher matcher = Pattern.compile("/\\d{3}RICOH.*").matcher(pictureUrl);
+//                if (matcher.find()) {
+//                    String pictureFileName_DCIM = DCIM + matcher.group();
+//
+//                    Log.d("DCIM", DCIM);
+//                    Log.d("pictureFileName_DCIM", pictureFileName_DCIM);
+//
+//                    // List up files
+//                    System.out.println("Before deletion");
+//                    File [] files = new File(DCIM + "/100RICOH/").listFiles();
+//                    for(int i = 0; i < files.length; i++) {
+//                        if (files[i].isFile()) {
+//                            System.out.print(files[i].getName() + "  ");
+//                        }
+//                    }
+//                    System.out.println();
+//
+//                    // copy a picture to UploadDir
+//                    boolean isSuccess = copy2UploadDir(pictureFileName_DCIM, newPictureBasename);
+//                    if (isSuccess) {
+//                        Log.d("isSuccess in move picture", "true");
+//                    } else {
+//                        Log.d("isSuccess in move picture", "false");
+//                    }
+//                    File ffrom = new File(pictureFileName_DCIM);
+//                    File fto = new File(UploadDir + "/aa");
+//
+//                    boolean isSuccess = ffrom.renameTo(fto);
+//                    if (isSuccess) {
+//                        Log.d("isSuccess in move picture", "true");
+//                    } else {
+//                        Log.d("isSuccess in move picture", "false");
+//                    }
+////
+////                    File file = new File(pictureFileName_DCIM);
+////                    if (file.exists()) {
+////                        file.delete();
+////                    }
+////                    file = null;
+//
+//                    // List up files
+//                    System.out.println("After deletion");
+//                    files = new File(DCIM + "/100RICOH/").listFiles();
+//                    for(int i = 0; i < files.length; i++) {
+//                        if (files[i].isFile()) {
+//                            System.out.print(files[i].getName() + "  ");
+//                        }
+//                    }
+//                    System.out.println();
+//                }
+
                 // rename picture file
-                String soundFileBaseName = new File(soundFileName).getName();
-                Log.d("Basename of soundFileName", soundFileBaseName);
-                String pictureFileBaseName = soundFileBaseName.replace(".wav", ".JPG");
+                String soundBasename = new File(soundFileName).getName();
+                String newPictureBasename = soundBasename.replace(".wav", ".JPG");
                 Matcher matcher = Pattern.compile("/\\d{3}RICOH.*").matcher(pictureUrl);
                 if (matcher.find()) {
                     String pictureFileName_DCIM = DCIM + matcher.group();
                     Log.d("pictureFileName_DCIM", pictureFileName_DCIM);
 
-//                    File file_DCIM = new File(pictureFileName_DCIM);
-//                    if (file_DCIM.exists()) {
-//                        Log.d("file_DCIM.exists()", "true");
-//                    } else {
-//                        Log.d("file_DCIM.exists()", "false");
-//                    }
-//                    Log.d("AAAAAAAAA)", "AAAAA");
-
-                    // rename
-                    File pictureFile_DCIM = new File(pictureFileName_DCIM);
-                    String basename = pictureFile_DCIM.getName();
-                    Log.d("Basename of pictureFileName_DCIM", basename);
-                    pictureFileName = pictureFileName_DCIM.replace(basename, pictureFileBaseName);
-                    Log.d("pictureFileName", pictureFileName);
-                    File pictureFile = new File(pictureFileName);
-                    boolean isSuccess = pictureFile_DCIM.renameTo(pictureFile);
+                    Log.d("Copy begin", "true");
+                    // copy a picture to UploadDir
+                    boolean isSuccess = move2UploadDir(pictureFileName_DCIM, newPictureBasename);
                     if (isSuccess) {
-                        Log.d("isSuccess", "true");
+                        Log.d("isSuccess in copying picture", "true");
                     } else {
-                        Log.d("isSuccess", "false");
+                        Log.d("isSuccess in copying picture", "false");
                     }
-
                 }
 
-                // Upload the picture file
-                uploadSingleFile(pictureFileName);
             } else {
                 notificationError(getResources().getString(R.string.take_picture_error));
             }
@@ -561,16 +640,6 @@ public class MainActivity extends PluginActivity {
         if (webUI.getIsReady())
             changeReadyLED();
     }
-
-    private void uploadSingleFile(String fileName) {
-        List<String> uploadFileList = new ArrayList<String>();
-        uploadFileList.add(fileName);
-        webUI.uploadSpecifiedPhotoList(uploadFileList);
-    }
-
-//    private void uploadSingleFile(String fileName) {
-//        webUI.addUploadingFile(fileName);
-//    }
 
     /**
      * Call the shooting application when this plug-in ends.
@@ -838,8 +907,13 @@ public class MainActivity extends PluginActivity {
             long filesize = file.length();
             Log.d("soundFileSize", ""+filesize);
 
-            // Upload the sound file
-            uploadSingleFile(soundFileName);
+            // move a sound file to UploadDir
+            boolean isSuccess = move2UploadDir(soundFileName);
+            if (isSuccess) {
+                Log.d("isSuccess in moving sound file", "true");
+            } else {
+                Log.d("isSuccess in moving sound file", "false");
+            }
 
         } catch (RuntimeException e) {
             splay.playSound(splay.soundRecordingFailed);
@@ -862,6 +936,55 @@ public class MainActivity extends PluginActivity {
         }, minimumRecordingInterval);
 
     }
+
+    // move file to UploadDir
+    private boolean move2UploadDir(String fnameFrom) {
+        File fileFrom = new File(fnameFrom);
+        String basenameFrom = fileFrom.getName();
+//        Log.d("Basename of fnameFrom", basenameFrom);
+        return move2UploadDir(fnameFrom, basenameFrom);
+    }
+
+    // move file to UploadDir
+    private boolean move2UploadDir(String fnameFrom, String newBasename) {
+        File fileFrom = new File(fnameFrom);
+//        String basenameFrom = fileFrom.getName();
+//        Log.d("Basename of fnameFrom", basenameFrom);
+        String fnameTo = UploadDir + "/" + newBasename;
+        Log.d("fnameTo", fnameTo);
+        File fileTo = new File(fnameTo);
+//        return fileFrom.renameTo(fileTo);
+        try {
+            Files.move(fileFrom, fileTo);
+        } catch(IOException e) {
+            Log.d("IOException at move2UploadDir", ""+e);
+        }
+        return fileTo.exists();
+    }
+
+//    // copy file to UploadDir
+//    private boolean copy2UploadDir(String fnameFrom) {
+//        File fileFrom = new File(fnameFrom);
+//        String basenameFrom = fileFrom.getName();
+////        Log.d("Basename of fnameFrom", basenameFrom);
+//        return copy2UploadDir(fnameFrom, basenameFrom);
+//    }
+//
+//    // copy file to UploadDir
+//    private boolean copy2UploadDir(String fnameFrom, String newBasename) {
+//        File fileFrom = new File(fnameFrom);
+////        String basenameFrom = fileFrom.getName();
+////        Log.d("Basename of fnameFrom", basenameFrom);
+//        String fnameTo = UploadDir + "/" + newBasename;
+//        Log.d("fnameTo", fnameTo);
+//        File fileTo = new File(fnameTo);
+//        try {
+//            Files.copy(fileFrom, fileTo);
+//        } catch(IOException e) {
+//            Log.d("IOException at copy2UploadDir", ""+e);
+//        }
+//        return fileTo.exists();
+//    }
 
     private void takePicture() {
         mTakePictureTask = new TakePictureTask(mTakePictureTaskCallback, null,

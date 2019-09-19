@@ -46,6 +46,7 @@ dependencies {
     implementation "com.google.code.gson:gson:${project.GSON_VERSION}"
     implementation 'com.nanohttpd:nanohttpd-webserver:2.2.0'
     implementation "com.koushikdutta.async:androidasync:${project.ANDROIDASYNC_VERSION}"
+    api 'com.google.guava:guava:28.0-android'
 
     implementation project(':pluginlibrary')
 
