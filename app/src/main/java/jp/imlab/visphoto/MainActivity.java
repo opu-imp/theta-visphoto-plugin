@@ -322,6 +322,9 @@ public class MainActivity extends PluginActivity {
             @Override
             public void run() {
                 // TODO: ここで処理を実行する
+                // WIFI connection (CL mode)
+                notificationWlanCl();
+
                 new InternetCheck(internet -> {
                     if (internet) {
                         Log.d("Wifi", "Connected");
